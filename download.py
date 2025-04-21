@@ -1,52 +1,78 @@
+import requests
+from urllib.parse import urlencode
 import pandas as pd
-from sklearn.preprocessing import OrdinalEncoder
+import numpy as np
+import matplotlib.pyplot as plt
 
 def download_data():
-    df = pd.read_csv('https://raw.githubusercontent.com/dayekb/Basic_ML_Alg/main/cars_moldova_no_dup.csv', delimiter = ',')
-    df.to_csv("cars.csv", index = False)
-    return df
+    base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
+    public_key = 'https://disk.yandex.ru/d/3YBohlrOKEtkkg'   
+ 
+    final_url = base_url + urlencode(dict(public_key=public_key))
+    response = requests.get(final_url)
+    download_url = response.json()['href']
+ 
+    download_response = requests.get(download_url)
+    with open('downloaded_file.csv', 'wb') as f:    
+        f.write(download_response.content)
+     
 
-def clear_data(path2df):
-    df = pd.read_csv(path2df)
+def clear_data():
+    taxiDB = pd.read_csv('downloaded_file.csv', index_col=0)
+    taxiDB['pickup_datetime'] = pd.to_datetime(taxiDB['pickup_datetime'])
+    taxiDB['dropoff_datetime'] = pd.to_datetime(taxiDB['dropoff_datetime'])
+    taxiDB['trip_duration'] = (taxiDB['dropoff_datetime'] - taxiDB['pickup_datetime']).dt.total_seconds()
+
+    taxiDB = taxiDB.drop('dropoff_datetime', axis=1)
+    taxiDB['vendor_id'] = taxiDB['vendor_id'] - 1
+ 
+    taxiDB['store_and_fwd_flag'] = taxiDB['store_and_fwd_flag'].apply(lambda x: 0 if x=='N' else 1)
+    taxiDB['pickup_datetime'] = taxiDB['pickup_datetime'].astype(str)
+    allLat  = list(taxiDB['pickup_latitude']) + list(taxiDB['dropoff_latitude'])
+    medianLat  = sorted(allLat)[int(len(allLat)/2)]
+
+    latMultiplier  = 111.32
+
+    taxiDB['pickup_latitude']   = latMultiplier  * (taxiDB['pickup_latitude']   - medianLat)
+    taxiDB['dropoff_latitude']   = latMultiplier  * (taxiDB['dropoff_latitude']  - medianLat)
+    allLong = list(taxiDB['pickup_longitude']) + list(taxiDB['dropoff_longitude'])
+
+    medianLong  = sorted(allLong)[int(len(allLong)/2)]
+
+    longMultiplier = np.cos(medianLat*(np.pi/180.0)) * 111.32
+ 
+    taxiDB['pickup_longitude']   = longMultiplier  * (taxiDB['pickup_longitude']   - medianLong)
+    taxiDB['dropoff_longitude']   = longMultiplier  * (taxiDB['dropoff_longitude']  - medianLong)
+
+ 
+    taxiDB['distance_km'] = ((taxiDB['dropoff_longitude'] -taxiDB['pickup_longitude'])**2 + (taxiDB['dropoff_latitude'] - taxiDB['pickup_latitude'])**2)**0.5
+
+    taxiDB = taxiDB.drop(['pickup_longitude', 'dropoff_longitude',
+                      'pickup_latitude', 'dropoff_latitude'], axis=1)
+
+ 
+    taxiDB['passenger_count'] = taxiDB['passenger_count'].map(taxiDB.groupby(['passenger_count'])['trip_duration'].mean())
+
+
+    taxiDB = taxiDB.rename({'passenger_count':'category_encoded'}, axis=1)
+
+    result_columns = [
     
-    cat_columns = ['Make', 'Model', 'Style', 'Fuel_type', 'Transmission']
-    num_columns = ['Year', 'Distance', 'Engine_capacity(cm3)', 'Price(euro)']
+        'vendor_id',
+        'pickup_datetime',
+        'category_encoded',
+        'store_and_fwd_flag',
+        'trip_duration',
+        'distance_km'
+    ]
+
+    taxiDB = taxiDB[result_columns]
+
+    taxiDB['pickup_datetime'] = pd.to_datetime(taxiDB['pickup_datetime'])
     
-    question_dist = df[(df.Year <2021) & (df.Distance < 1100)]
-    df = df.drop(question_dist.index)
-    # Анализ и очистка данных
-    # анализ гистограмм
-    question_dist = df[(df.Distance > 1e6)]
-    df = df.drop(question_dist.index)
-    
-    # здравый смысл
-    question_engine = df[df["Engine_capacity(cm3)"] < 200]
-    df = df.drop(question_engine.index)
-    
-    # здравый смысл
-    question_engine = df[df["Engine_capacity(cm3)"] > 5000]
-    df = df.drop(question_engine.index)
-    
-    # здравый смысл
-    question_price = df[(df["Price(euro)"] < 101)]
-    df = df.drop(question_price.index)
-    
-    # анализ гистограмм
-    question_price = df[df["Price(euro)"] > 1e5]
-    df = df.drop(question_price.index)
-    
-    #анализ гистограмм
-    question_year = df[df.Year < 1971]
-    df = df.drop(question_year.index)
-    
-    df = df.reset_index(drop=True)  
-    ordinal = OrdinalEncoder()
-    ordinal.fit(df[cat_columns])
-    Ordinal_encoded = ordinal.transform(df[cat_columns])
-    df_ordinal = pd.DataFrame(Ordinal_encoded, columns=cat_columns)
-    df[cat_columns] = df_ordinal[cat_columns]
-    df.to_csv('df_clear.csv')
+     
+    taxiDB.to_csv('df_clear.csv')
     return True
 
 download_data()
-clear_data("cars.csv")
+clear_data()
