@@ -13,8 +13,8 @@ import joblib
 
 def scale_frame(frame):
     df = frame.copy()
-    X = taxiDB.drop(['pickup_datetime', 'trip_duration'], axis=1)
-    y = taxiDB['trip_duration']
+    X = df.drop(['pickup_datetime', 'trip_duration'], axis=1)
+    y = df['trip_duration']
     X['distance_km'] = X['distance_km'].fillna(1)
     scaler = StandardScaler()
     power_trans = PowerTransformer()
