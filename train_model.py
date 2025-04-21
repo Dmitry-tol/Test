@@ -1,5 +1,4 @@
-
-from os import name
+ from os import name
 from sklearn.preprocessing import StandardScaler, PowerTransformer
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -14,7 +13,9 @@ import joblib
 
 def scale_frame(frame):
     df = frame.copy()
-    X,y = df.drop(columns = ['Price(euro)']), df['Price(euro)']
+    X = taxiDB.drop(['pickup_datetime', 'trip_duration'], axis=1)
+    y = taxiDB['trip_duration']
+    X['distance_km'] = X['distance_km'].fillna(1)
     scaler = StandardScaler()
     power_trans = PowerTransformer()
     X_scale = scaler.fit_transform(X.values)
@@ -43,7 +44,7 @@ if __name__ == "__main__":
             "fit_intercept": [False, True],
             }
     
-    mlflow.set_experiment("linear model cars")
+    mlflow.set_experiment("Default")
     with mlflow.start_run():
         lr = SGDRegressor(random_state=42)
         clf = GridSearchCV(lr, params, cv = 3, n_jobs = 4)
@@ -75,5 +76,5 @@ if __name__ == "__main__":
             joblib.dump(lr, file)
 
     dfruns = mlflow.search_runs()
-    path2model = dfruns.sort_values("metrics.r2", ascending=False).iloc[0]['artifact_uri'].replace("file://","") + '/model' #путь до эксперимента с лучшей моделью
+    path2model = dfruns.sort_values("metrics.r2", ascending=False).iloc[0]['artifact_uri'].replace("file://","") + '/model' 
     print(path2model)
