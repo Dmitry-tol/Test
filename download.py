@@ -4,6 +4,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.python import PythonOperator 
+from pathlib import Path
+import os
+from datetime import timedelta
+from train_model import train
+
 def download_data():
     base_url = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?'
     public_key = 'https://disk.yandex.ru/d/3YBohlrOKEtkkg'   
@@ -74,5 +82,16 @@ def clear_data():
     taxiDB.to_csv('df_clear.csv')
     return True
 
-download_data()
-clear_data()
+dag1 = DAG(
+    dag_id="my_project",
+    start_date=datetime(2025, 15, 12),
+    concurrency=4,
+    schedule_interval=timedelta(minutes=5),
+#    schedule="@hourly",
+    max_active_runs=1,
+    catchup=False,
+)
+download_task = PythonOperator(python_callable=download_data, task_id = "download_data", dag = dag1)
+clear_task = PythonOperator(python_callable=clear_data, task_id = "clear_data", dag = dag1)
+train_task = PythonOperator(python_callable=train, task_id = "train_data", dag = dag1)
+download_task >> clear_task >> train_task
